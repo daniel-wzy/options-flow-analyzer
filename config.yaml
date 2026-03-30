@@ -1,0 +1,43 @@
+# Options Flow Analyzer Configuration
+
+# Watchlist - tickers to monitor
+watchlist:
+  - NVDA
+  - TSLA
+  - AAPL
+  - MSFT
+  - AMD
+  - META
+  - AMZN
+  - GOOGL
+  - SPY
+  - QQQ
+
+# Unusual activity thresholds
+thresholds:
+  # Volume must be X times open interest to be "unusual"
+  volume_multiplier: 3.0
+  # Minimum estimated premium size (in USD)
+  min_premium: 100000
+
+# Monitoring settings
+monitor:
+  interval_minutes: 60
+  market_hours_only: true
+  market_open: "09:30"
+  market_close: "16:00"
+
+# LLM settings (provider: anthropic or openai)
+llm:
+  provider: anthropic
+  model: claude-haiku-4-20250514
+  max_tokens: 500
+
+# Alert settings
+alerts:
+  discord:
+    enabled: true
+    # Set DISCORD_WEBHOOK_URL in .env OR set channel_id for bot token
+    channel_id: ""  # Fill in your Discord channel ID
+  telegram:
+    enabled: false
