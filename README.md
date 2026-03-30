@@ -1,123 +1,188 @@
 # Options Flow Analyzer 📈
 
-An AI-powered unusual options activity detector that scans for large, anomalous options trades and uses an LLM to explain what the flow likely means.
+An AI-powered unusual options activity detector that scans for large, anomalous options trades and uses an LLM to explain what the flow likely means — then posts actionable paper trade signals to Discord.
 
-Built for paper trading validation — scan signals, track results, decide if it's worth automating with real money.
+> ⚠️ **This project is experimental and unvalidated. Accuracy data will be published after 30+ tracked trades. Do NOT use with real money until you have personally validated signal accuracy.**
+
+---
 
 ## How It Works
 
-1. **Fetch** options chains from Yahoo Finance (free, no API key needed)
-2. **Detect** unusual activity: contracts where today's volume far exceeds normal (vol/OI ratio)
-3. **Analyze** each signal with Claude/GPT — explains the bet, break-even, and what it might signal
-4. **Alert** via Discord or terminal
+1. **Fetch** options chains from Yahoo Finance (free, no API key needed for data)
+2. **Detect** unusual activity: contracts where today's volume far exceeds open interest
+3. **Analyze** each signal with Claude AI — explains the bet, break-even, and what it might signal
+4. **Alert** via Discord bot with paper trade instructions
 
 ## Features
 
 - 🔍 Scans 10+ tickers for unusual volume spikes
-- 🧠 LLM analysis of each unusual contract
-- 📊 Backtesting tool (vol/OI ratio as proxy)
-- 💬 Discord alerts with paper trade instructions
-- 📝 Signal logging for accuracy tracking
-- ⚡ Zero cost for data (yfinance)
+- 🧠 LLM analysis of each signal (Claude or OpenAI)
+- 📊 Backtest CLI tool
+- 💬 Discord bot posts signals automatically
+- 📝 Signal accuracy tracker (`signals_log.json`)
+- ⚡ Free data via yfinance — no paid data subscription needed
 
-## Quick Start
+---
+
+## Prerequisites
+
+Before running, you'll need:
+
+### 1. Claude API Key (or OpenAI)
+- Go to [console.anthropic.com](https://console.anthropic.com) → create an account → API Keys → Create Key
+- Or use [platform.openai.com](https://platform.openai.com) for OpenAI
+
+### 2. Discord Bot (for alerts)
+1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
+2. New Application → Bot → Add Bot → copy the **Bot Token**
+3. OAuth2 → URL Generator → scopes: `bot` → permissions: `Send Messages`, `View Channels`
+4. Invite the bot to your server using the generated URL
+5. Copy your target **Channel ID** (right-click channel → Copy Channel ID in Discord developer mode)
+
+### 3. Python 3.9+
+
+---
+
+## Setup
 
 ```bash
 git clone https://github.com/yourusername/options-flow-analyzer.git
 cd options-flow-analyzer
 
 python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env and add your API keys
+# Open .env and fill in your keys
 ```
 
-## Configuration
+### `.env` configuration:
+```env
+# Choose one LLM provider:
+ANTHROPIC_API_KEY=sk-ant-...
+# or
+OPENAI_API_KEY=sk-...
 
-Edit `.env`:
-```
-ANTHROPIC_API_KEY=sk-ant-...   # or use OPENAI_API_KEY
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...  # optional
+# Discord (for alerts):
+DISCORD_BOT_TOKEN=your-bot-token
 ```
 
-Edit `config.yaml` to set your watchlist, thresholds, and alert preferences.
+### `config.yaml` configuration:
+```yaml
+alerts:
+  discord:
+    enabled: true
+    channel_id: "YOUR_CHANNEL_ID_HERE"   # paste your Discord channel ID
+```
+
+---
 
 ## Usage
 
 ```bash
-# Scan full watchlist
+# Scan full watchlist once
 python main.py scan
 
 # Analyze one ticker
 python main.py analyze NVDA
 
-# Continuous monitoring (market hours)
+# Continuous monitoring during market hours (every 60 min)
 python main.py monitor
 
 # Backtest / signal detection
-python backtest.py --ticker NVDA --threshold 2.0 --min-premium 50000
+python backtest.py --ticker NVDA --threshold 2.0
 python backtest.py --tickers NVDA TSLA AAPL MSFT --threshold 3.0
+
+# View accuracy report
+python -m src.signal_tracker
 ```
+
+---
 
 ## Signal Format
 
 ```
-🟢 BULLISH CALL — NVDA
-• Strike: $177.5 | Expiry: 2026-03-29 | ATM
-• Volume: 51,717 (7.1x OI)
-• Est. Premium: $5,100,000
+🟢 BUY CALL SIGNAL — NVDA
+• Contract: CALL @ $177.5 strike, exp 2026-03-29
+• Underlying: $175.64 | Moneyness: ATM
+• Volume/OI: 7.1x normal | Est. Premium: $5,100,000
 • IV: 68.3%
-• Underlying: $175.64
 
 AI Analysis:
-• Aggressive bullish bet expiring in 6 days — short-dated = high conviction
-• Break-even: ~$180.50 (+2.8% move needed)
-• Similar ATM call sweeps on NVDA have preceded 3-5% moves within 3 days
-• Confidence: Medium-High
+• Short-dated aggressive bullish bet — high conviction
+• Break-even: ~$180.50 (+2.8% move needed in 6 days)
+• Risk: Theta decay accelerates significantly this close to expiry
+• Confidence: Medium
+
+Paper trade: Moomoo Virtual → NVDA → Options → Mar 29 → $177.5 Call
+Stop loss: -50% | Target: +100%
 ```
 
-## Paper Trading Workflow
+---
 
-1. Run `python main.py monitor` or use the hourly cron
-2. Signal appears → open your broker's paper/virtual trading
-3. Execute the suggested contract (1-2 contracts)
-4. Track in `signals_log.json`
-5. After 30+ signals, run accuracy analysis
+## Tracking Results
+
+Signals are logged to `signals_log.json` (gitignored — stays local). After paper trading, run the accuracy reporter:
+
+```bash
+python -m src.signal_tracker
+```
+
+Contribute your results to help validate the algorithm before using real money.
+
+---
 
 ## Project Structure
 
 ```
 options-flow-analyzer/
-├── main.py                 # Entry point (scan/monitor/analyze)
-├── backtest.py             # Backtesting & signal detection
-├── discord_signal_bot.py   # Discord alert bot
-├── config.yaml             # Watchlist, thresholds, settings
+├── main.py                 # Entry point
+├── backtest.py             # Signal detection & backtest
+├── discord_signal_bot.py   # Discord alert delivery
+├── config.yaml             # Settings (watchlist, thresholds, channel)
 ├── requirements.txt
-├── .env.example            # Template (copy to .env)
+├── .env.example            # Template — copy to .env, add your keys
 └── src/
-    ├── data_fetcher.py     # yfinance + Moomoo data
-    ├── anomaly_detector.py # Volume spike detection
-    ├── llm_analyzer.py     # Claude/GPT analysis
-    └── alerter.py          # Discord/Telegram alerts
+    ├── data_fetcher.py     # yfinance + Moomoo data fetching
+    ├── anomaly_detector.py # Volume spike detection logic
+    ├── llm_analyzer.py     # Claude/GPT signal analysis
+    ├── alerter.py          # Discord/Telegram delivery
+    └── signal_tracker.py   # Paper trade result logging & stats
 ```
+
+---
 
 ## Data Sources
 
 | Source | Cost | Notes |
 |--------|------|-------|
-| yfinance | Free | Current options chain only |
-| Moomoo OpenD | Free (with account) | Real-time, requires local OpenD |
-| Polygon.io | $29/mo | Historical options snapshots |
+| yfinance | Free | Current options chain (default) |
+| Moomoo OpenD | Free (with account) | Real-time, requires local OpenD daemon |
+| Polygon.io | $29/mo | Historical snapshots for backtesting |
 | CBOE DataShop | $100+/mo | Most complete historical data |
 
-> **Note:** For true historical backtesting, you need a paid options data provider. yfinance only provides the current chain, so "backtesting" here uses vol/OI ratio as a real-time proxy.
+> For proper historical backtesting, a paid data source is needed. yfinance provides current chain only.
 
-## Disclaimer
+---
 
-This is an experimental tool for educational and paper trading purposes only. Not financial advice. Always validate signals before trading real money.
+## ⚠️ Legal Disclaimer
+
+**THIS SOFTWARE IS PROVIDED FOR EDUCATIONAL AND RESEARCH PURPOSES ONLY.**
+
+- This tool does NOT constitute financial advice, investment advice, or trading recommendations.
+- Past signal performance (if any) does not guarantee future results.
+- Options trading involves substantial risk of loss and is not appropriate for all investors.
+- You may lose the entire value of your investment.
+- The authors and contributors of this project are NOT responsible for any financial losses incurred through use of this software.
+- Always paper trade first. Never trade with money you cannot afford to lose.
+- Consult a licensed financial advisor before making any investment decisions.
+
+By using this software, you acknowledge and accept full responsibility for any trading decisions made.
+
+---
 
 ## License
 
-MIT
+MIT — use freely, contribute back if you improve it.
