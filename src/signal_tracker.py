@@ -141,3 +141,88 @@ def print_accuracy_report():
 
 if __name__ == "__main__":
     print_accuracy_report()
+
+def monitor_open_signals(notify_discord: bool = False):
+    """
+    Check open trades against current option prices.
+    Auto-close at +100% (target) or -50% (stop loss).
+    """
+    import yfinance as yf
+    
+    signals = load_signals()
+    open_signals = [s for s in signals if s.get('exit_price') is None and s.get('entry_price')]
+    
+    if not open_signals:
+        print("No open trades to monitor.")
+        return
+    
+    updated = False
+    for s in open_signals:
+        try:
+            ticker = s['ticker']
+            strike = s['strike']
+            option_type = s['option_type']
+            expiration = s['expiration']
+            entry_price = s['entry_price']
+            
+            stock = yf.Ticker(ticker)
+            expirations = stock.options
+            
+            if expiration not in expirations:
+                # Check if expired
+                from datetime import datetime
+                exp_dt = datetime.strptime(expiration[:10], '%Y-%m-%d')
+                if exp_dt < datetime.now():
+                    s['exit_price'] = 0.01
+                    s['exit_date'] = datetime.now().strftime('%Y-%m-%d')
+                    s['exit_reason'] = 'expired'
+                    s['pnl_pct'] = -99.0
+                    s['correct'] = False
+                    print(f"  ⏰ {ticker} {option_type.upper()} ${strike} EXPIRED → -99%")
+                    updated = True
+                continue
+            
+            chain = stock.option_chain(expiration)
+            df = chain.calls if option_type == 'call' else chain.puts
+            
+            match = df[abs(df['strike'] - strike) < 0.5]
+            if match.empty:
+                continue
+            
+            current_price = match['lastPrice'].iloc[0] or match['bid'].iloc[0]
+            if not current_price or current_price == 0:
+                continue
+            
+            pnl_pct = (current_price / entry_price - 1) * 100
+            
+            print(f"  📊 {ticker} {option_type.upper()} ${strike} | entry ${entry_price} → now ${current_price:.2f} | {pnl_pct:+.1f}%")
+            
+            # Auto-close conditions
+            if pnl_pct >= 100:
+                s['exit_price'] = current_price
+                s['exit_date'] = datetime.now().strftime('%Y-%m-%d')
+                s['exit_reason'] = 'target_hit'
+                s['pnl_pct'] = round(pnl_pct, 1)
+                s['correct'] = True
+                print(f"  🎯 TARGET HIT: +{pnl_pct:.1f}%")
+                updated = True
+            elif pnl_pct <= -50:
+                s['exit_price'] = current_price
+                s['exit_date'] = datetime.now().strftime('%Y-%m-%d')
+                s['exit_reason'] = 'stop_loss'
+                s['pnl_pct'] = round(pnl_pct, 1)
+                s['correct'] = False
+                print(f"  🛑 STOP LOSS: {pnl_pct:.1f}%")
+                updated = True
+                
+        except Exception as e:
+            print(f"  Error checking {s['ticker']}: {e}")
+    
+    if updated:
+        save_signals(signals)
+        print(f"\n✅ Updated signals_log.json")
+    
+    return open_signals
+
+if __name__ == "__main__":
+    print_accuracy_report()
